@@ -3,7 +3,7 @@
 const TW = 16, MW = 100, MH = 70;         // tamaño de tile y del mapa
 const DAY_LEN = 240;                      // segundos que dura un día (4 minutos)
 const INV_CAP = 15;                       // capacidad de la mochila de cada colono
-const SAVE_KEY = 'miniColoniaSaveV9';
+const SAVE_KEY = 'miniColoniaSaveV11';
 const SEASON_DAYS = 5;                    // días que dura cada estación (año = ~80 min)
 const SEASONS = [
   { id:'spring', name:'Primavera', emoji:'🌸' },
@@ -12,16 +12,19 @@ const SEASONS = [
   { id:'winter', name:'Invierno',  emoji:'❄️' },
 ];
 const SKILLS = [
-  { id:'build',  icon:'🔨', name:'Construir' },
-  { id:'farm',   icon:'🌾', name:'Cultivar' },
-  { id:'cook',   icon:'🍲', name:'Cocinar' },
-  { id:'craft',  icon:'⚒️', name:'Fabricar' },
-  { id:'gather', icon:'🪓', name:'Recolectar' },
-  { id:'hunt',   icon:'🏹', name:'Cazar' },
+  { id:'build',    icon:'🔨', name:'Construir' },
+  { id:'farm',     icon:'🌾', name:'Cultivar' },
+  { id:'cook',     icon:'🍲', name:'Cocinar' },
+  { id:'craft',    icon:'⚒️', name:'Fabricar' },
+  { id:'gather',   icon:'🪓', name:'Recolectar' },
+  { id:'hunt',     icon:'🏹', name:'Cazar' },
+  { id:'research', icon:'📚', name:'Investigar' },
+  { id:'medic',    icon:'🩺', name:'Curar' },
 ];
 const SKILL_OF_TASK = {
   build:'build', sow:'farm', harvestCrop:'farm', cook:'cook', craft:'craft',
-  chop:'gather', mine:'gather', harvest:'gather', hunt:'hunt',
+  chop:'gather', mine:'gather', harvest:'gather', hunt:'hunt', fish:'hunt',
+  research:'research', treat:'medic',
 };
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
@@ -31,10 +34,12 @@ const NAMES = ['Ana','Beto','Carla','Darío','Elena','Fito','Gina','Hugo','Iris'
   'Nahuel','Ofelia','Paloma','Ramiro','Selva','Tomás','Alba','Ciro','Delfina','Emilio'];
 const PAWN_COLORS = ['#e8b04b','#5bb5e0','#d96a6a','#8fd45e','#c98fe0','#e0925b','#6ae0c4','#e05bb0'];
 
-const RES_EMOJI = { wood:'🪵', stone:'🪨', iron:'🔩', fiber:'🌿', food:'🍎', meat:'🍖',
-                    guiso:'🍲', tools:'🔨', ropa:'👕', gold:'🪙' };
+const RES_EMOJI = { wood:'🪵', stone:'🪨', iron:'🔩', fiber:'🌿', food:'🍎', meat:'🍖', fish:'🐟',
+                    guiso:'🍲', tools:'🔨', ropa:'👕', herb:'🌱', medicina:'💊', gold:'🪙' };
 const RES_NAME  = { wood:'Madera', stone:'Piedra', iron:'Hierro', fiber:'Fibra', food:'Comida',
-                    meat:'Carne', guiso:'Guiso', tools:'Herramientas', ropa:'Ropa', gold:'Oro' };
+                    meat:'Carne', fish:'Pescado', guiso:'Guiso', tools:'Herramientas', ropa:'Ropa',
+                    herb:'Hierbas', medicina:'Medicina', gold:'Oro' };
+const DOG_NAMES = ['Rulo', 'Manchas', 'Tita', 'Chispa', 'Fideo', 'Greta', 'Bicho', 'Luna'];
 
 const BUILDS = {
   wall:   { name:'Muro',    cost:{stone:2},        work:3.5, icon:'🧱', desc:'Bloquea el paso. Ideal para cerrar tu base.' },
@@ -47,8 +52,28 @@ const BUILDS = {
   fogon:  { name:'Fogón',   cost:{stone:4},        work:5,   icon:'🍲', desc:'Cocina guisos: 1 🍖 + 1 🍎 (o 3 🍎) → 1 🍲.' },
   taller: { name:'Taller',  cost:{wood:5,stone:3}, work:6,   icon:'⚒️', desc:'Fabrica herramientas (2 🪵 + 1 🔩 → 1 🔨, +15% trabajo).' },
   telar:  { name:'Telar',   cost:{wood:4},         work:5,   icon:'🧵', desc:'Teje ropa (4 🌿 → 1 👕, +5 de humor al que la usa).' },
-  statue: { name:'Estatua', cost:{stone:5},        work:6,   icon:'🗿', desc:'Arte. Los colonos cercanos ganan +4 de humor.' },
+  statue: { name:'Estatua', cost:{stone:5},        work:6,   icon:'🗿', desc:'Arte. Los colonos cercanos ganan +4 de humor y embellece la habitación.' },
+  desk:   { name:'Escritorio', cost:{wood:5,fiber:1}, work:5, icon:'📚', desc:'Acá se investiga: elegí una tecnología en el panel 🧪.' },
+  chair:  { name:'Silla',   cost:{wood:2},         work:2,   icon:'🪑', desc:'Comer sentado da +2 de humor. Embellece.', tech:'carpinteria' },
+  shelf:  { name:'Estantería', cost:{wood:4},      work:3,   icon:'🗄️', desc:'Libros y orden: embellece mucho la habitación.', tech:'carpinteria' },
+  chest:  { name:'Baúl',    cost:{wood:3},         work:3,   icon:'🧰', desc:'Depósito compacto: funciona como almacén y queda lindo adentro.' },
+  brazier:{ name:'Brasero', cost:{stone:3,iron:1}, work:4,   icon:'♨️', desc:'Calor y luz para interiores: abriga como una fogata.', tech:'construccion' },
+  medbed: { name:'Cama de enfermería', cost:{wood:4,fiber:2}, work:5, icon:'🏥', desc:'Los enfermos se recuperan mucho más rápido acá.', tech:'medicina' },
+  pier:   { name:'Muelle', cost:{wood:4}, work:4, icon:'🎣', desc:'Se construye en la orilla: los colonos pescan 🐟 (sirve para el guiso).' },
 };
+
+// tecnologías investigables en el escritorio
+const TECHS = [
+  { id:'carpinteria',  name:'Carpintería fina',      cost:40, icon:'🪑', desc:'Desbloquea la silla y la estantería.' },
+  { id:'medicina',     name:'Medicina herbal',       cost:60, icon:'💊', desc:'Desbloquea la enfermería y fabricar medicina (2 🌱 → 1 💊 en el taller).' },
+  { id:'construccion', name:'Construcción avanzada', cost:70, icon:'♨️', desc:'Desbloquea el brasero, calor y luz para interiores.' },
+  { id:'agricultura',  name:'Agricultura',           cost:60, icon:'🌾', desc:'Los cultivos rinden +1 de comida y crecen un 20% más rápido.' },
+  { id:'textil',       name:'Telares mejorados',     cost:50, icon:'👕', desc:'La ropa cuesta solo 3 de fibra.' },
+];
+
+// cuánto embellece cada cosa (para el puntaje de la habitación)
+const BEAUTY = { statue:8, shelf:4, brazier:3, table:2, farol:2, desk:2, medbed:2,
+                 chair:1, bed:1, chest:1, telar:1, taller:1 };
 
 const CATS = [
   { id:'orders', label:'⚑ Órdenes' },
@@ -58,7 +83,7 @@ const CATS = [
 const TOOLS = [
   { id:'chop',    cat:'orders', icon:'🪓', name:'Talar',    desc:'Marca árboles para talar. Cada árbol da 6 de madera.' },
   { id:'mine',    cat:'orders', icon:'⛏️', name:'Minar',    desc:'Marca rocas para minar. Las vetas rojizas dan hierro 🔩.' },
-  { id:'harvest', cat:'orders', icon:'🌿', name:'Cosechar', desc:'Marca bayas 🫐 (comida) y fibra silvestre 🌿 (para tejer).' },
+  { id:'harvest', cat:'orders', icon:'🌿', name:'Cosechar', desc:'Marca bayas 🫐 (comida), fibra 🌿 (para tejer) y hierba medicinal 🌱.' },
   { id:'hunt',    cat:'orders', icon:'🏹', name:'Cazar',    desc:'Marca animales: conejo 🐇 = 2 carne, ciervo 🦌 = 6. ¡Se escapan!' },
   { id:'cancel',  cat:'orders', icon:'❌', name:'Cancelar', desc:'Quita órdenes, planos y zonas. También demuele construcciones (devuelve la mitad).' },
   ...Object.entries(BUILDS).map(([k, d]) => ({
@@ -70,13 +95,15 @@ const TOOLS = [
 ];
 
 const PRIO_CATS = [
-  { id:'build',  icon:'🔨', name:'Construir' },
-  { id:'farm',   icon:'🌾', name:'Cultivar' },
-  { id:'cook',   icon:'🍲', name:'Cocinar' },
-  { id:'craft',  icon:'⚒️', name:'Fabricar' },
-  { id:'gather', icon:'🪓', name:'Recolectar' },
-  { id:'hunt',   icon:'🏹', name:'Cazar' },
-  { id:'haul',   icon:'📦', name:'Acarrear' },
+  { id:'medic',    icon:'🩺', name:'Curar' },
+  { id:'build',    icon:'🔨', name:'Construir' },
+  { id:'farm',     icon:'🌾', name:'Cultivar' },
+  { id:'cook',     icon:'🍲', name:'Cocinar' },
+  { id:'craft',    icon:'⚒️', name:'Fabricar' },
+  { id:'research', icon:'📚', name:'Investigar' },
+  { id:'gather',   icon:'🪓', name:'Recolectar' },
+  { id:'hunt',     icon:'🏹', name:'Caza y pesca' },
+  { id:'haul',     icon:'📦', name:'Acarrear' },
 ];
 const PRIO_LABEL = { 0:'no lo hace', 1:'prioridad alta', 2:'prioridad normal', 3:'prioridad baja' };
 
@@ -87,7 +114,8 @@ const TASK_LABEL = {
   sleep:'Durmiendo 💤', sleepHere:'Durmiendo en el suelo 💤', wander:'Paseando 🚶',
   social:'Yendo a charlar 💬', cook:'Cocinando 🍲', craft:'Fabricando ⚒️',
   campfire:'Junto a la fogata 🔥', hunt:'Cazando 🏹', follow:'Siguiendo a sus papás 👶',
-  extinguish:'¡Apagando fuego! 🧯',
+  extinguish:'¡Apagando fuego! 🧯', research:'Investigando 📚', treat:'Curando a un enfermo 🩺',
+  fish:'Pescando 🎣',
 };
 
 const TRAITS = {
@@ -139,6 +167,8 @@ const CHAT = {
           'Hoy estás precioso/a.'],
   sweetReply: ['Te quiero 💕', 'Vos siempre tan dulce.', 'Ay, vení acá.', 'Ja, qué zalamero/a.'],
   cold: ['¡Me congelo!', 'Brrr... necesito abrigo.', '¿Y la fogata? ¡Qué frío!', 'No siento los dedos.'],
+  sick: ['No me siento bien...', '¡Achís!', 'Me duele todo el cuerpo.', 'Necesito acostarme...',
+         '¿Alguien tiene medicina?'],
 };
 
 const BACKSTORIES = [
@@ -152,6 +182,8 @@ const BACKSTORIES = [
   { id:'noble',    name:'Noble venido/a a menos', skill:null,     ban:'haul',  tale:'tenía sirvientes para todo; ya no' },
   { id:'minero',   name:'Minero/a',               skill:'gather', ban:null,    tale:'pasó media vida bajo tierra buscando vetas' },
   { id:'maestra',  name:'Maestro/a rural',        skill:'farm',   ban:null,    tale:'enseñaba a leer a los chicos del valle' },
+  { id:'curandero',name:'Curandero/a',            skill:'medic',  ban:null,    tale:'las hierbas le hablan; la gente, a veces también' },
+  { id:'erudito',  name:'Erudito/a',              skill:'research', ban:'gather', tale:'leía libros mientras el mundo se venía abajo' },
 ];
 const BACKSTORY_BABY = { id:'nacido', name:'Nacido/a en la colonia', skill:null, ban:null,
                          tale:'primera generación de un mundo nuevo' };
@@ -168,7 +200,10 @@ const TRADE_GOODS = [
   { res:'fiber', sellN:4, sellG:2, buyN:4, buyG:4 },
   { res:'food',  sellN:5, sellG:3, buyN:5, buyG:5 },
   { res:'meat',  sellN:3, sellG:3, buyN:0, buyG:0 },
+  { res:'fish',  sellN:3, sellG:2, buyN:0, buyG:0 },
   { res:'guiso', sellN:1, sellG:2, buyN:0, buyG:0 },
+  { res:'herb',  sellN:4, sellG:2, buyN:4, buyG:4 },
+  { res:'medicina', sellN:1, sellG:4, buyN:1, buyG:6 },
   { res:'tools', sellN:1, sellG:4, buyN:1, buyG:7 },
   { res:'ropa',  sellN:1, sellG:3, buyN:1, buyG:5 },
 ];
@@ -178,8 +213,11 @@ const TRADER_LINES = ['¡Buenas! ¿Algo para comerciar?', '¡Precios justos, se 
 
 const O_NAME = {
   tree:'🌳 Árbol', rock:'🪨 Roca', berry:'🫐 Arbusto de bayas', fiber:'🌿 Fibra silvestre',
+  herb:'🌱 Hierba medicinal',
   wall:'🧱 Muro', door:'🚪 Puerta', bed:'🛏️ Cama', table:'🍽️ Mesa', fogata:'🔥 Fogata',
   fogon:'🍲 Fogón', taller:'⚒️ Taller', telar:'🧵 Telar', statue:'🗿 Estatua', farol:'🏮 Farol',
+  desk:'📚 Escritorio', chair:'🪑 Silla', shelf:'🗄️ Estantería', chest:'🧰 Baúl',
+  brazier:'♨️ Brasero', medbed:'🏥 Cama de enfermería', pier:'🎣 Muelle',
 };
 
 // perfiles de mundo: cada partida genera un lugar distinto

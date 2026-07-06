@@ -53,6 +53,10 @@ function redrawMinimap() {
     mmCtx.fillStyle = '#e8b04b';
     mmCtx.fillRect((trader.x / TW) * MM_S - 1, (trader.y / TW) * MM_S - 1, 3, 3);
   }
+  if (colonyDog) {
+    mmCtx.fillStyle = '#c9915c';
+    mmCtx.fillRect((colonyDog.x / TW) * MM_S - 1, (colonyDog.y / TW) * MM_S - 1, 3, 3);
+  }
   mmCtx.fillStyle = '#fff';
   for (const c of colonists) mmCtx.fillRect((c.x / TW) * MM_S - 1, (c.y / TW) * MM_S - 1, 3, 3);
 }
@@ -215,6 +219,87 @@ function drawObject(t, px, py) {
     ctx.fillRect(px + 5.5, py + 3, 5, 5);
     ctx.strokeStyle = '#3d2a14';
     ctx.strokeRect(px + 5.5, py + 3, 5, 5);
+  } else if (t.o === 'herb') {
+    const sw = Math.sin(gtime * 2.2 + x * 2) * 0.6;
+    ctx.strokeStyle = '#5fae6a';
+    ctx.lineWidth = 1.4;
+    for (const [ox, l, k] of [[6, 7, -1.5], [9, 9, 1], [11, 6, 2]]) {
+      ctx.beginPath();
+      ctx.moveTo(px + ox, py + 14);
+      ctx.quadraticCurveTo(px + ox + k, py + 14 - l / 2, px + ox + k + sw, py + 14 - l);
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#cfe8a0';
+    ctx.fillRect(px + 8, py + 5, 2, 2);
+  } else if (t.o === 'desk') {
+    ctx.fillStyle = '#7a5c34';
+    ctx.fillRect(px + 1, py + 5, TW - 2, TW - 8);
+    ctx.fillStyle = '#8f6f42';
+    ctx.fillRect(px + 2, py + 6, TW - 4, 3);
+    ctx.fillStyle = '#e9e4d2';
+    ctx.fillRect(px + 4, py + 7, 5, 4);
+    ctx.fillStyle = '#3a3f4a';
+    ctx.fillRect(px + 11, py + 7, 2, 3);
+  } else if (t.o === 'chair') {
+    ctx.fillStyle = '#8a6a3c';
+    ctx.fillRect(px + 4, py + 7, 8, 6);
+    ctx.fillRect(px + 4, py + 2, 2, 6);
+    ctx.fillStyle = '#6e5327';
+    ctx.fillRect(px + 4, py + 13, 2, 2);
+    ctx.fillRect(px + 10, py + 13, 2, 2);
+  } else if (t.o === 'shelf') {
+    ctx.fillStyle = '#6e5327';
+    ctx.fillRect(px + 2, py + 2, TW - 4, TW - 4);
+    ctx.fillStyle = '#54401e';
+    ctx.fillRect(px + 3, py + 7, TW - 6, 1.5);
+    ctx.fillRect(px + 3, py + 11, TW - 6, 1.5);
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = ['#a34d4d', '#4d7aa3', '#5da34d', '#c2a23e'][i];
+      ctx.fillRect(px + 4 + i * 2.4, py + 3.5, 1.8, 3.5);
+    }
+  } else if (t.o === 'chest') {
+    ctx.fillStyle = '#7a5c34';
+    ctx.fillRect(px + 3, py + 5, TW - 6, TW - 8);
+    ctx.fillStyle = '#5c431f';
+    ctx.fillRect(px + 3, py + 8, TW - 6, 1.5);
+    ctx.fillStyle = '#e0c04b';
+    ctx.fillRect(px + 7, py + 8, 2, 3);
+  } else if (t.o === 'brazier') {
+    ctx.fillStyle = '#3a3d45';
+    ctx.fillRect(px + 4, py + 8, 8, 4);
+    ctx.fillRect(px + 5, py + 12, 2, 3);
+    ctx.fillRect(px + 9, py + 12, 2, 3);
+    const fl = 1 + Math.sin(gtime * 10 + x * 2) * 0.3;
+    ctx.fillStyle = '#e88a2a';
+    ctx.beginPath();
+    ctx.moveTo(px + 5, py + 8);
+    ctx.lineTo(px + 8, py + 8 - 5 * fl);
+    ctx.lineTo(px + 11, py + 8);
+    ctx.fill();
+  } else if (t.o === 'medbed') {
+    ctx.fillStyle = '#5c6470';
+    ctx.fillRect(px + 2, py + 2, TW - 4, TW - 4);
+    ctx.fillStyle = '#eef1f5';
+    ctx.fillRect(px + 3, py + 3, TW - 6, TW - 6);
+    ctx.fillStyle = '#d64545';
+    ctx.fillRect(px + 7, py + 6, 2, 6);
+    ctx.fillRect(px + 5, py + 8, 6, 2);
+  } else if (t.o === 'pier') {
+    ctx.fillStyle = '#8a6a42';
+    ctx.fillRect(px, py + 3, TW, 10);
+    ctx.fillStyle = '#75572f';
+    ctx.fillRect(px, py + 6, TW, 1);
+    ctx.fillRect(px, py + 9, TW, 1);
+    ctx.fillStyle = '#5c431f';
+    ctx.fillRect(px + 2, py + 13, 2, 3);
+    ctx.fillRect(px + 12, py + 13, 2, 3);
+    // caña apuntando al agua más cercana
+    ctx.strokeStyle = '#3d2a14';
+    ctx.beginPath();
+    ctx.moveTo(px + 8, py + 6);
+    ctx.lineTo(px + 13, py - 2);
+    ctx.stroke();
   }
 }
 
@@ -408,6 +493,14 @@ function draw() {
     ctx.beginPath(); ctx.ellipse(a.x, a.y + 5, 5, 2, 0, 0, 7); ctx.fill();
     ctx.fillText(ANIMALS[a.kind].emoji, a.x, a.y + 4);
   }
+  // el perro de la colonia
+  if (colonyDog) {
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(colonyDog.x, colonyDog.y + 5, 4.5, 1.8, 0, 0, 7); ctx.fill();
+    ctx.font = '11px sans-serif';
+    const hop = colonyDog.target ? Math.abs(Math.sin(gtime * 12)) * 1.5 : 0;
+    ctx.fillText('🐕', colonyDog.x, colonyDog.y + 4 - hop);
+  }
   // mercader
   if (trader) {
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -482,9 +575,10 @@ function draw() {
     ctx.globalCompositeOperation = 'lighter';
     for (let y = vy0; y <= vy1; y++) for (let x = vx0; x <= vx1; x++) {
       const tt = T(x, y);
-      if (tt.o !== 'fogata' && tt.o !== 'farol' && tt.fire <= 0) continue;
+      if (tt.o !== 'fogata' && tt.o !== 'farol' && tt.o !== 'brazier' && tt.fire <= 0) continue;
       const fx = x * TW + 8, fy = y * TW + 10;
-      const r = (tt.fire > 0 ? 64 : tt.o === 'farol' ? 34 : 52 + Math.sin(gtime * 8 + x) * 5) * dk / 0.55;
+      const r = (tt.fire > 0 ? 64 : tt.o === 'farol' ? 34 : tt.o === 'brazier' ? 42
+                 : 52 + Math.sin(gtime * 8 + x) * 5) * dk / 0.55;
       const g = ctx.createRadialGradient(fx, fy, 4, fx, fy, r);
       g.addColorStop(0, 'rgba(255,170,70,0.45)');
       g.addColorStop(1, 'rgba(255,170,70,0)');
@@ -524,6 +618,11 @@ function draw() {
         ctx.fillText('💤', px + 12, py + 2);
         ctx.font = '9px monospace';
       }
+      if (c.sick) {
+        ctx.font = '10px sans-serif';
+        ctx.fillText('🤒', px - 13, py + 2);
+        ctx.font = '9px monospace';
+      }
     }
     if (trader) {
       const px = w2sx(trader.x), py = w2sy(trader.y - 12);
@@ -531,6 +630,13 @@ function draw() {
       ctx.fillText('Mercader', px + 1, py + 1);
       ctx.fillStyle = '#e8b04b';
       ctx.fillText('Mercader', px, py);
+    }
+    if (colonyDog) {
+      const px = w2sx(colonyDog.x), py = w2sy(colonyDog.y - 11);
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillText(colonyDog.name, px + 1, py + 1);
+      ctx.fillStyle = '#e0c08a';
+      ctx.fillText(colonyDog.name, px, py);
     }
   }
   // textos flotantes
@@ -640,6 +746,8 @@ function drawTooltip() {
   for (const a of animals) if (a.tx === mouse.tx && a.ty === mouse.ty)
     lines.push(`${ANIMALS[a.kind].emoji} ${ANIMALS[a.kind].name}${a.hunted ? ' (marcado 🏹)' : ''}`);
   if (trader && trader.tx === mouse.tx && trader.ty === mouse.ty) lines.push('🧳 Mercader');
+  if (colonyDog && colonyDog.tx === mouse.tx && colonyDog.ty === mouse.ty)
+    lines.push(`🐕 ${colonyDog.name}, el perro de la colonia`);
   if (t.o) lines.push(t.o === 'rock' && t.ore === 'iron' ? '🔩 Veta de hierro' : O_NAME[t.o]);
   if (t.bp) lines.push(`📐 Plano: ${BUILDS[t.bp.type].name}${t.bp.paid ? '' : ' (esperando materiales)'}`);
   if (t.farm) lines.push(t.crop === null ? '🌾 Cultivo (sin sembrar)'
@@ -649,7 +757,7 @@ function drawTooltip() {
   if (t.desig) lines.push(`⚑ Orden: ${({chop:'talar', mine:'minar', harvest:'cosechar'})[t.desig]}`);
   if (t.fire > 0) lines.push('🔥 ¡EN LLAMAS!');
   if (t.floor) lines.push('🟫 Piso de tablas (+25% velocidad)');
-  if (t.indoor) lines.push('🏠 Interior (abriga y da humor)');
+  if (t.indoor) lines.push(`🏠 Interior · belleza ${roomBeautyAt(t)}${roomBeautyAt(t) >= 8 ? ' 🖼️' : roomBeautyAt(t) >= 4 ? ' 🛋️' : ''}`);
   if (t.scorched) lines.push('🌫️ Tierra quemada');
   if (t.g === 'water') lines.push('💧 Agua');
   if (!lines.length) return;

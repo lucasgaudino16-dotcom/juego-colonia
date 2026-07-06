@@ -14,9 +14,12 @@
     <span class="res">🌿 <b id="r-fiber">0</b></span>
     <span class="res" id="res-food">🍎 <b id="r-food">0</b></span>
     <span class="res">🍖 <b id="r-meat">0</b></span>
+    <span class="res">🐟 <b id="r-fish">0</b></span>
     <span class="res">🍲 <b id="r-guiso">0</b></span>
     <span class="res">🔨 <b id="r-tools">0</b></span>
     <span class="res">👕 <b id="r-ropa">0</b></span>
+    <span class="res">🌱 <b id="r-herb">0</b></span>
+    <span class="res">💊 <b id="r-medicina">0</b></span>
     <span class="res">🪙 <b id="r-gold">0</b></span>
     <span id="warn" style="display:none">⚠️ ¡Poca comida!</span>
     <span id="clock"></span>
@@ -27,6 +30,7 @@
     <button class="zbtn" id="newbtn" title="Nueva partida">🆕</button>
     <button class="zbtn" id="mutebtn" title="Sonido">🔊</button>
     <button class="zbtn" id="chronbtn" title="Crónica de la colonia">📖</button>
+    <button class="zbtn" id="resbtn" title="Investigación">🧪</button>
     <button class="spd" data-s="0">⏸</button>
     <button class="spd active" data-s="1">1x</button>
     <button class="spd" data-s="2">2x</button>
@@ -43,12 +47,27 @@
       <h3>📖 Crónica de la colonia <button id="cclose">✕</button></h3>
       <div id="crows"></div>
     </div>
+    <div id="respanel" style="display:none">
+      <h3>🧪 Investigación <button id="rclose">✕</button></h3>
+      <div style="font-size:11px;color:#8a92a3">Construí un escritorio 📚 y elegí qué investigar.
+      Los colonos con prioridad en 📚 se sientan a estudiar.</div>
+      <div id="rrows"></div>
+    </div>
     <div id="eventmodal" class="overlay" style="display:none">
       <div class="emcard">
         <span class="emicon" id="emicon">📜</span>
         <div class="emtitle" id="emtitle"></div>
         <div class="emtext" id="emtext"></div>
         <button class="embtn" id="emok">Seguir ▸</button>
+      </div>
+    </div>
+    <div id="legacy" class="overlay" style="display:none">
+      <div class="emcard introcard">
+        <span class="emicon">🪦</span>
+        <div class="emtitle" style="font-size:19px">La historia de la colonia</div>
+        <div class="emtext" id="legacytext"></div>
+        <div id="legacylog"></div>
+        <button class="embtn" id="legacyok">🌱 Fundar una nueva colonia</button>
       </div>
     </div>
     <div id="intro" class="overlay" style="display:none">
@@ -62,6 +81,7 @@
       </div>
     </div>
     <div id="side">
+      <div id="alerts"></div>
       <div id="goal" style="display:none"></div>
       <h2>Colonos</h2>
       <div id="pawns"></div>

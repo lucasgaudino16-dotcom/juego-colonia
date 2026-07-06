@@ -43,6 +43,7 @@ function spawnColonist(x, y) {
   if (back.skill) c.skills[back.skill].lv = Math.min(10, c.skills[back.skill].lv + 3);
   if (back.ban) c.prio[back.ban] = 0;
   colonists.push(c);
+  stats.everColonists++;
   if ([5, 8, 10].includes(colonists.length))
     addStory(`👥 La colonia ya cuenta con ${colonists.length} miembros.`);
   return c;
@@ -102,6 +103,10 @@ function startTask(c, bfs, type, nr, workTime, paidCost) {
 function abandonTask(c) {
   if (c.task) {
     if (c.task.paidCost) refund(c.task.paidCost);
+    if (c.task.type === 'treat') {
+      const p = colonists.find(x => x.id === c.task.target);
+      if (p) p.beingTreated = false;
+    }
     const t = inB(c.task.x, c.task.y) ? T(c.task.x, c.task.y) : null;
     if (t && t.rsv === c.id) t.rsv = null;
   }
@@ -151,6 +156,7 @@ function tryFarm(c, bfs) {
 function tryCook(c, bfs) {
   if (resources.guiso >= colonists.length) return false;
   const recipe = (resources.meat >= 1 && resources.food >= 1) ? { meat: 1, food: 1 }
+               : (resources.fish >= 1 && resources.food >= 1) ? { fish: 1, food: 1 }
                : (resources.food >= 6) ? { food: 3 } : null;
   if (!recipe || !canAfford(recipe)) return false;
   const nr = nearestReach(bfs, t => t.o === 'fogon' && t.rsv === null, false);
@@ -169,17 +175,48 @@ function tryCraft(c, bfs) {
       return true;
     }
   }
-  // ropa en el telar
-  if (canAfford({ fiber: 4 }) && resources.ropa < colonists.filter(o => !o.outfit).length) {
+  // medicina en el taller (requiere investigación)
+  if (researched.medicina && canAfford({ herb: 2 }) && resources.medicina < 4) {
+    const nr = nearestReach(bfs, t => t.o === 'taller' && t.rsv === null, false);
+    if (nr) {
+      nr.t.rsv = c.id;
+      startTask(c, bfs, 'craft', nr, 4, { herb: 2 });
+      c.task.product = 'medicina';
+      return true;
+    }
+  }
+  // ropa en el telar (con Telares mejorados cuesta menos)
+  const ropaCost = { fiber: researched.textil ? 3 : 4 };
+  if (canAfford(ropaCost) && resources.ropa < colonists.filter(o => !o.outfit).length) {
     const nr = nearestReach(bfs, t => t.o === 'telar' && t.rsv === null, false);
     if (nr) {
       nr.t.rsv = c.id;
-      startTask(c, bfs, 'craft', nr, 5, { fiber: 4 });
+      startTask(c, bfs, 'craft', nr, 5, ropaCost);
       c.task.product = 'ropa';
       return true;
     }
   }
   return false;
+}
+function tryResearch(c, bfs) {
+  if (!research.current || researched[research.current]) return false;
+  const nr = nearestReach(bfs, t => t.o === 'desk' && t.rsv === null, false);
+  if (!nr) return false;
+  nr.t.rsv = c.id;
+  return startTask(c, bfs, 'research', nr, 4);
+}
+function tryMedic(c, bfs) {
+  if (resources.medicina < 1) return false;
+  const patient = colonists.find(p => p !== c && !p.dead && p.sick && p.sick.severity > 0.2 &&
+    (p.treatCd || 0) <= gtime && !p.beingTreated);
+  if (!patient) return false;
+  const nr = nearestReach(bfs, t => t.x === patient.tx && t.y === patient.ty, false);
+  if (!nr) return false;
+  patient.beingTreated = true;
+  c.task = { type: 'treat', target: patient.id, x: patient.tx, y: patient.ty,
+             workLeft: 2, workTotal: 2, phase: 'go' };
+  c.path = buildPath(bfs, nr.goal);
+  return true;
 }
 function tryGather(c, bfs) {
   const nr = nearestReach(bfs, t => t.desig !== null && t.rsv === null, false);
@@ -195,9 +232,16 @@ function tryHunt(c, bfs) {
     const d = Math.abs(a.tx - c.tx) + Math.abs(a.ty - c.ty);
     if (d < bd) { bd = d; best = a; }
   }
-  if (!best) return false;
-  c.task = { type: 'hunt', target: best.id, x: best.tx, y: best.ty, phase: 'go', workLeft: 0, workTotal: 0 };
-  return true;
+  if (best) {
+    c.task = { type: 'hunt', target: best.id, x: best.tx, y: best.ty, phase: 'go', workLeft: 0, workTotal: 0 };
+    return true;
+  }
+  // sin presas marcadas: a pescar al muelle (hasta tener una buena reserva)
+  if (resources.fish < colonists.length * 2) {
+    const nr = nearestReach(bfs, t => t.o === 'pier' && t.rsv === null, true);
+    if (nr) { nr.t.rsv = c.id; return startTask(c, bfs, 'fish', nr, 6); }
+  }
+  return false;
 }
 function tryHaul(c, bfs) {
   if (!anyStock() || invTotal(c) >= INV_CAP) return false;
@@ -207,8 +251,8 @@ function tryHaul(c, bfs) {
   return startTask(c, bfs, 'haul', nr, 0);
 }
 const JOBFNS = {
-  build: tryBuild, farm: tryFarm, cook: tryCook, craft: tryCraft,
-  gather: tryGather, hunt: tryHunt, haul: tryHaul,
+  medic: tryMedic, build: tryBuild, farm: tryFarm, cook: tryCook, craft: tryCraft,
+  research: tryResearch, gather: tryGather, hunt: tryHunt, haul: tryHaul,
 };
 
 // -------- búsqueda de trabajo --------
@@ -235,9 +279,15 @@ function findTask(c) {
     nr = nearestReach(bfs, t => t.o === 'berry' && t.rsv === null, false);
     if (nr) { nr.t.rsv = c.id; return startTask(c, bfs, 'eatBerry', nr, 1.5); }
   }
+  // 1b. enfermo grave → a reposar (enfermería primero)
+  if (c.sick && c.sick.severity > 0.35) {
+    nr = nearestReach(bfs, t => t.o === 'medbed' && t.rsv === null, true) ||
+         nearestReach(bfs, t => t.o === 'bed' && t.rsv === null, true);
+    if (nr) { nr.t.rsv = c.id; return startTask(c, bfs, 'sleep', nr, 0); }
+  }
   // 2. sueño
   if (c.energy < 22 || (isNight() && c.energy < 65)) {
-    nr = nearestReach(bfs, t => t.o === 'bed' && t.rsv === null, true);
+    nr = nearestReach(bfs, t => (t.o === 'bed' || t.o === 'medbed') && t.rsv === null, true);
     if (nr) { nr.t.rsv = c.id; return startTask(c, bfs, 'sleep', nr, 0); }
     c.task = { type: 'sleepHere', x: c.tx, y: c.ty, phase: 'work', workLeft: 0, workTotal: 0 };
     return true;
@@ -333,6 +383,11 @@ function nearTable(c) {
     if (inB(c.tx + dx, c.ty + dy) && T(c.tx + dx, c.ty + dy).o === 'table') return true;
   return false;
 }
+function nearChair(c) {
+  for (const [dx, dy] of [[0, 0], ...DIRS])
+    if (inB(c.tx + dx, c.ty + dy) && T(c.tx + dx, c.ty + dy).o === 'chair') return true;
+  return false;
+}
 function eatFromStock(c) {
   if (resources.guiso >= 1) {
     resources.guiso--;
@@ -343,6 +398,11 @@ function eatFromStock(c) {
     resources.food -= eaten;
     c.hunger = clamp(c.hunger + eaten * 45, 0, 100);
     addBuff(c, 'Comí bien 🍎', 4, 90);
+  } else if (resources.fish >= 1) {
+    const eaten = Math.min(2, resources.fish);
+    resources.fish -= eaten;
+    c.hunger = clamp(c.hunger + eaten * 40, 0, 100);
+    addBuff(c, 'Pescado crudo 🐟', -3, 90);
   } else if (resources.meat >= 1) {
     const eaten = Math.min(2, resources.meat);
     resources.meat -= eaten;
@@ -350,11 +410,15 @@ function eatFromStock(c) {
     addBuff(c, 'Carne cruda 🍖', -4, 90);
   }
   if (nearTable(c)) addBuff(c, 'Comí en la mesa 🍽️', 4, 90);
+  if (nearChair(c)) addBuff(c, 'Comí sentado 🪑', 2, 90);
+  const rb = roomBeautyAt(T(c.tx, c.ty));
+  if (rb >= 8) addBuff(c, 'Comedor precioso 🖼️', 4, 90);
   if (Math.random() < 0.4) say(c, pick(CHAT.food), 2.2);
 }
 
 const WORK_SFX = { chop:'chop', mine:'mine', build:'build', cook:'cook', craft:'craft',
-                   harvest:'harvest', harvestCrop:'harvest', eat:'eat', eatHere:'eat', eatInv:'eat' };
+                   harvest:'harvest', harvestCrop:'harvest', eat:'eat', eatHere:'eat', eatInv:'eat',
+                   fish:'splash' };
 function finishWork(c, t) {
   const k = c.task.type;
   if (t && t.rsv === c.id) t.rsv = null;
@@ -371,7 +435,8 @@ function finishWork(c, t) {
       t.o = null; t.ore = null; t.desig = null;
       break;
     case 'harvest':
-      addToInv(c, t.o === 'fiber' ? 'fiber' : 'food', 3);
+      addToInv(c, t.o === 'fiber' ? 'fiber' : t.o === 'herb' ? 'herb' : 'food',
+               t.o === 'herb' ? 2 : 3);
       t.o = null; t.desig = null;
       break;
     case 'eatBerry':
@@ -392,6 +457,7 @@ function finishWork(c, t) {
           addStory(`🔨 Se construyó ${type === 'statue' ? 'la primera' : 'el primer'} ${BUILDS[type].name.toLowerCase()} de la colonia.`);
         t.o = type;
         if (t.o === 'wall') { t.farm = false; t.stock = false; }
+        if (t.o === 'chest') t.stock = true;          // el baúl es un mini-almacén
         if (t.o === 'wall' || t.o === 'door') roomsDirty = true;
       }
       break;
@@ -401,7 +467,30 @@ function finishWork(c, t) {
       sfxAt('douse', c.x, c.y);
       break;
     case 'sow':         t.crop = 0.001; break;
-    case 'harvestCrop': t.crop = null; addToInv(c, 'food', 3); stats.harvested++; break;
+    case 'harvestCrop':
+      t.crop = null;
+      addToInv(c, 'food', researched.agricultura ? 4 : 3);
+      stats.harvested++;
+      break;
+    case 'fish':
+      addToInv(c, 'fish', ri(1, 2));
+      break;
+    case 'research': {
+      const tech = TECHS.find(x => x.id === research.current);
+      if (tech && !researched[tech.id]) {
+        research.prog[tech.id] = (research.prog[tech.id] || 0) + 6 + skillLv(c, 'research');
+        addFloater(c.x, c.y - 10, '+📚');
+        if (research.prog[tech.id] >= tech.cost) {
+          researched[tech.id] = true;
+          research.current = null;
+          addStory(`🔬 Investigación completada: <b>${tech.name}</b>. ${tech.desc}`);
+          showEventModal(tech.icon, '¡Investigación completada!', `<b>${tech.name}</b><br>${tech.desc}`);
+          sfx('level');
+          renderTools();
+        }
+      }
+      break;
+    }
     case 'cook':
       c.task.paidCost = null;
       resources.guiso++;
@@ -442,33 +531,37 @@ function taskValid(c) {
     switch (k) {
       case 'chop':        return t.o === 'tree';
       case 'mine':        return t.o === 'rock';
-      case 'harvest':     return t.o === 'berry' || t.o === 'fiber';
+      case 'harvest':     return t.o === 'berry' || t.o === 'fiber' || t.o === 'herb';
       case 'eatBerry':    return t.o === 'berry';
       case 'build':       return !!t.bp;
       case 'sow':         return t.farm && t.crop === null;
       case 'harvestCrop': return t.farm && t.crop !== null && t.crop >= 1;
-      case 'sleep':       return t.o === 'bed';
+      case 'sleep':       return t.o === 'bed' || t.o === 'medbed';
       case 'cook':        return t.o === 'fogon';
       case 'craft':       return c.task.product === 'ropa' ? t.o === 'telar' : t.o === 'taller';
       case 'extinguish':  return t.fire > 0;
+      case 'research':    return t.o === 'desk';
+      case 'fish':        return t.o === 'pier';
     }
     return true;
   }
   switch (k) {
     case 'chop':        return t.o === 'tree' && t.desig === 'chop';
     case 'mine':        return t.o === 'rock' && t.desig === 'mine';
-    case 'harvest':     return (t.o === 'berry' || t.o === 'fiber') && t.desig === 'harvest';
+    case 'harvest':     return (t.o === 'berry' || t.o === 'fiber' || t.o === 'herb') && t.desig === 'harvest';
     case 'eatBerry':    return t.o === 'berry';
     case 'build':       return !!t.bp;
     case 'sow':         return t.farm && t.crop === null;
     case 'harvestCrop': return t.farm && t.crop !== null && t.crop >= 1;
     case 'eat':         return resources.food >= 1 || resources.guiso >= 1 || resources.meat >= 1 || c.task.phase === 'work';
-    case 'sleep':       return t.o === 'bed';
+    case 'sleep':       return t.o === 'bed' || t.o === 'medbed';
     case 'haul':        return c.task.phase !== 'go' || !!t.item;
     case 'cook':        return t.o === 'fogon';
     case 'craft':       return c.task.product === 'ropa' ? t.o === 'telar' : t.o === 'taller';
     case 'campfire':    return t.o === 'fogata';
     case 'extinguish':  return t.fire > 0;
+    case 'research':    return t.o === 'desk' && !!research.current;
+    case 'fish':        return t.o === 'pier';
   }
   return true;
 }
@@ -513,7 +606,8 @@ function manualInteract(c) {
     if (t.rsv === null) t.rsv = c.id;
     equipTool(c);
   };
-  if (t0.o === 'bed') { mk('sleep', t0, 0); return; }
+  if (t0.o === 'bed' || t0.o === 'medbed') { mk('sleep', t0, 0); return; }
+  if (t0.o === 'pier') { mk('fish', t0, 6); return; }
   if (t0.stock && c.hunger < 80 && (resources.food >= 1 || resources.guiso >= 1 || resources.meat >= 1)) { mk('eat', t0, 1.2); return; }
   if (t0.farm && t0.crop === null) { mk('sow', t0, 2); return; }
   // acciones en tiles adyacentes (incluido el propio)
@@ -531,8 +625,9 @@ function manualInteract(c) {
     if (t.farm && t.crop !== null && t.crop >= 1) { mk('harvestCrop', t, 2); return; }
     if (t.o === 'tree')  { mk('chop', t, 3); return; }
     if (t.o === 'rock')  { mk('mine', t, 4); return; }
-    if (t.o === 'fiber') { mk('harvest', t, 1.8); return; }
+    if (t.o === 'fiber' || t.o === 'herb') { mk('harvest', t, 1.8); return; }
     if (t.o === 'berry') { mk(c.hunger < 50 ? 'eatBerry' : 'harvest', t, 1.8); return; }
+    if (t.o === 'desk' && research.current && !researched[research.current]) { mk('research', t, 4); return; }
     if (t.o === 'fogon' && (resources.food >= 3 || (resources.meat >= 1 && resources.food >= 1))) {
       const recipe = (resources.meat >= 1 && resources.food >= 1) ? { meat: 1, food: 1 } : { food: 3 };
       mk('cook', t, 4, recipe);
@@ -587,9 +682,20 @@ function updateColonist(c, dt) {
   c.hunger = clamp(c.hunger - hungerRate * dt, 0, 100);
   if (!sleeping) c.energy = clamp(c.energy - (110 / DAY_LEN) * (c.trait === 'dormilon' ? 1.3 : 1) * dt, 0, 100);
   if (c.hunger <= 0) c.hp -= 2.5 * dt;
-  else c.hp = clamp(c.hp + 1.5 * dt, 0, 100);
+  else if (!(c.sick && c.sick.severity >= 1)) c.hp = clamp(c.hp + 1.5 * dt, 0, 100);
+  // la gripe avanza si no se trata; el reposo (sobre todo en enfermería) la cura
+  if (c.sick) {
+    const resting = isSleeping(c);
+    const onMedbed = resting && inB(c.task.x, c.task.y) && T(c.task.x, c.task.y).o === 'medbed';
+    const rate = onMedbed ? -1.3 : resting ? -0.5 : 0.55;
+    c.sick.severity = clamp(c.sick.severity + rate * dt / DAY_LEN, 0, 1.2);
+    if (c.sick.severity <= 0) cureSick(c);
+    else if (c.sick.severity >= 1) c.hp -= 1.5 * dt;
+    if (c.sick && !c.say && !c.inConvo && Math.random() < 0.004 * dt * 60) say(c, pick(CHAT.sick));
+  }
   if (c.hp <= 0) {
     c.dead = true;
+    const cause = c.hunger <= 0 ? 'de hambre' : 'por la gripe';
     abandonTask(c);
     for (const r in c.inv) if (c.inv[r] > 0) dropItem(T(c.tx, c.ty), r, c.inv[r]);
     if (selected === c.id) selected = null;
@@ -598,7 +704,8 @@ function updateColonist(c, dt) {
       const p = colonists.find(x => x.id === c.partner);
       if (p) { p.partner = null; addBuff(p, 'Perdí a mi pareja 💔', -20, 240); }
     }
-    addStory(`☠️ <b>${c.name}</b> murió de hambre.`);
+    stats.deaths++;
+    addStory(`☠️ <b>${c.name}</b> murió ${cause}.`);
     sfx('bad');
     return;
   }
@@ -611,7 +718,8 @@ function updateColonist(c, dt) {
       if (!warm) {
         outerCold:
         for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
-          if (inB(c.tx + dx, c.ty + dy) && T(c.tx + dx, c.ty + dy).o === 'fogata') { warm = true; break outerCold; }
+          const o = inB(c.tx + dx, c.ty + dy) ? T(c.tx + dx, c.ty + dy).o : null;
+          if (o === 'fogata' || o === 'brazier') { warm = true; break outerCold; }
         }
       }
       if (!warm) {
@@ -633,6 +741,8 @@ function updateColonist(c, dt) {
         break outer;
       }
     }
+    if (colonyDog && Math.hypot(c.x - colonyDog.x, c.y - colonyDog.y) < 3.5 * TW)
+      addBuff(c, `${colonyDog.name} cerca 🐕`, 3, 20);
   }
   // comentarios espontáneos
   if (!c.say && !c.inConvo && Math.random() < (c.trait === 'charlatan' ? 0.014 : 0.006) * dt * 60) {
@@ -654,6 +764,43 @@ function updateColonist(c, dt) {
   if (c.hunger < 10 && !['eat', 'eatHere', 'eatInv', 'eatBerry'].includes(tk.type)) { abandonTask(c); return; }
   if (!taskValid(c)) { abandonTask(c); return; }
 
+  // curación: el doctor va hasta el paciente
+  if (tk.type === 'treat') {
+    const p = colonists.find(x => x.id === tk.target && !x.dead);
+    if (!p || !p.sick || resources.medicina < 1) {
+      if (p) p.beingTreated = false;
+      c.task = null;
+      return;
+    }
+    if (Math.hypot(c.x - p.x, c.y - p.y) <= 1.8 * TW) {
+      c.path = [];
+      tk.workLeft -= dt * workMult(c, 'medic');
+      if (tk.workLeft <= 0) {
+        resources.medicina--;
+        p.sick.severity -= 0.6;
+        p.treatCd = gtime + 80;
+        p.beingTreated = false;
+        if (p.sick.severity <= 0) cureSick(p);
+        else addBuff(p, 'Atendido 💊', 4, 120);
+        addFloater(p.x, p.y - 10, '💊');
+        gainXp(c, 'medic', 10);
+        sfxAt('eat', c.x, c.y);
+        c.task = null;
+      }
+    } else {
+      tk.repath = (tk.repath || 0) - dt;
+      if (tk.repath <= 0 || !c.path.length) {
+        tk.repath = 0.8;
+        const bfs = bfsFrom(c.tx, c.ty);
+        const nr = nearestReach(bfs, t => t.x === p.tx && t.y === p.ty, false);
+        if (!nr) { p.beingTreated = false; c.task = null; return; }
+        tk.x = p.tx; tk.y = p.ty;
+        c.path = buildPath(bfs, nr.goal);
+      }
+      moveAlong(c, dt);
+    }
+    return;
+  }
   // caza: persecución con recálculo de ruta
   if (tk.type === 'hunt') {
     const a = animals.find(x => x.id === tk.target && !x.dead);
@@ -716,11 +863,20 @@ function updateColonist(c, dt) {
   if (tk.type === 'sleep' || tk.type === 'sleepHere') {
     const rate = ((tk.type === 'sleep' ? 300 : 150) / DAY_LEN) * (c.trait === 'dormilon' ? 1.3 : 1);
     c.energy = clamp(c.energy + rate * dt, 0, 100);
-    if (c.energy >= 100 || (c.energy > 60 && !isNight() && tk.type === 'sleepHere')) {
-      if (inB(tk.x, tk.y) && T(tk.x, tk.y).rsv === c.id) T(tk.x, tk.y).rsv = null;
+    // los enfermos se quedan reposando aunque estén descansados
+    const stillSick = c.sick && c.sick.severity > 0.15 && tk.type === 'sleep';
+    if ((c.energy >= 100 && !stillSick) ||
+        (c.energy > 60 && !isNight() && tk.type === 'sleepHere' && !c.sick)) {
+      const bt = inB(tk.x, tk.y) ? T(tk.x, tk.y) : null;
+      if (bt && bt.rsv === c.id) bt.rsv = null;
       addBuff(c, tk.type === 'sleep' ? 'Dormí en cama 🛏️' : 'Dormí en el suelo 🪨',
               tk.type === 'sleep' ? 8 : -8, 120);
-      if (tk.type === 'sleep' && T(tk.x, tk.y).indoor) addBuff(c, 'Dormí bajo techo 🏠', 4, 120);
+      if (tk.type === 'sleep' && bt && bt.indoor) {
+        addBuff(c, 'Dormí bajo techo 🏠', 4, 120);
+        const rb = roomBeautyAt(bt);
+        if (rb >= 8) addBuff(c, 'Cuarto precioso 🖼️', 6, 120);
+        else if (rb >= 4) addBuff(c, 'Cuarto acogedor 🛋️', 3, 120);
+      }
       c.task = null;
     }
     return;

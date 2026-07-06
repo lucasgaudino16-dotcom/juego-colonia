@@ -172,6 +172,14 @@ function genMap(scx, scy) {
       if (inB(x, y) && T(x, y).g === 'grass' && !T(x, y).o) T(x, y).o = 'fiber';
     }
   }
+  // hierba medicinal (matas chicas, más escasa)
+  for (let i = 0; i < Math.ceil(b.fiberP * 0.45); i++) {
+    const cx = ri(2, MW - 3), cy = ri(2, MH - 3);
+    for (let j = 0; j < 3; j++) {
+      const x = cx + ri(-1, 1), y = cy + ri(-1, 1);
+      if (inB(x, y) && T(x, y).g === 'grass' && !T(x, y).o) T(x, y).o = 'herb';
+    }
+  }
   // despejar la zona donde se funda la colonia
   for (let dy = -4; dy <= 4; dy++) for (let dx = -6; dx <= 6; dx++) {
     const t = T(scx + dx, scy + dy);
@@ -288,6 +296,37 @@ function updateAnimal(a, dt) {
   }
 }
 
+// ============================== EL PERRO DE LA COLONIA ==============================
+function updateDog(dt) {
+  const d = colonyDog;
+  if (!d || !colonists.length) return;
+  d.think -= dt;
+  if (d.think <= 0) {
+    d.think = 1.5 + Math.random() * 2;
+    // seguir al colono más cercano
+    let best = null, bd = 1e9;
+    for (const c of colonists) {
+      const q = Math.hypot(c.x - d.x, c.y - d.y);
+      if (q < bd) { bd = q; best = c; }
+    }
+    if (best && bd > 3.5 * TW) {
+      const tx = clamp(best.tx + ri(-1, 1), 1, MW - 2), ty = clamp(best.ty + ri(-1, 1), 1, MH - 2);
+      if (walkable(T(tx, ty))) d.target = { x: tx * TW + 8, y: ty * TW + 8 };
+    } else if (Math.random() < 0.4) {
+      const tx = clamp(d.tx + ri(-2, 2), 1, MW - 2), ty = clamp(d.ty + ri(-2, 2), 1, MH - 2);
+      if (walkable(T(tx, ty))) d.target = { x: tx * TW + 8, y: ty * TW + 8 };
+    }
+    if (Math.random() < 0.05) sfxAt('bark', d.x, d.y);
+  }
+  if (d.target) {
+    const dx = d.target.x - d.x, dy = d.target.y - d.y, q = Math.hypot(dx, dy), sp = 52 * dt;
+    if (q <= sp) { d.x = d.target.x; d.y = d.target.y; d.target = null; }
+    else { d.x += dx / q * sp; d.y += dy / q * sp; }
+    d.tx = (d.x / TW) | 0;
+    d.ty = (d.y / TW) | 0;
+  }
+}
+
 // ============================== MERCADER ==============================
 function spawnTrader() {
   const base = colonists[0];
@@ -348,8 +387,9 @@ function updateTrader(dt) {
 function saveGame(silent) {
   if (gameOver) return;
   const data = {
-    v: 9, day, time, gtime, nextId, nextTraderDay, resources, rels, msgs, story, coldSnapUntil,
-    stats, goalIndex, goalAnnounced, goalAnnounceAt,
+    v: 11, day, time, gtime, nextId, nextTraderDay, resources, rels, msgs, story, coldSnapUntil,
+    stats, goalIndex, goalAnnounced, goalAnnounceAt, researched, research,
+    colonyDog: colonyDog ? { name: colonyDog.name, x: colonyDog.x, y: colonyDog.y } : null,
     cam: { x: cam.x, y: cam.y, z: cam.z },
     kin, grudges,
     tiles: tiles.map(t => [t.g, t.o, t.desig, t.stock ? 1 : 0, t.farm ? 1 : 0, t.crop,
@@ -358,7 +398,8 @@ function saveGame(silent) {
     colonists: colonists.map(c => ({ id: c.id, name: c.name, color: c.color, trait: c.trait,
       back: c.back, x: c.x, y: c.y, hunger: c.hunger, energy: c.energy, hp: c.hp, tool: c.tool,
       outfit: c.outfit, inv: c.inv, prio: c.prio, buffs: c.buffs, inspiredUntil: c.inspiredUntil,
-      skills: c.skills, age: c.age, parents: c.parents, partner: c.partner })),
+      skills: c.skills, age: c.age, parents: c.parents, partner: c.partner,
+      sick: c.sick, treatCd: c.treatCd })),
     animals: animals.filter(a => !a.dead).map(a => ({ kind: a.kind, x: a.x, y: a.y, hp: a.hp, hunted: a.hunted })),
   };
   try {
@@ -369,7 +410,7 @@ function saveGame(silent) {
 function loadGame() {
   let d;
   try { d = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { return false; }
-  if (!d || d.v !== 9) return false;
+  if (!d || d.v !== 11) return false;
   day = d.day; time = d.time; gtime = d.gtime; nextId = d.nextId;
   nextTraderDay = d.nextTraderDay; resources = d.resources; rels = d.rels || {};
   msgs = d.msgs || [];
@@ -381,6 +422,14 @@ function loadGame() {
   goalAnnounceAt = d.goalAnnounceAt || gtime + 30;
   kin = d.kin || {};
   grudges = d.grudges || {};
+  researched = d.researched || {};
+  research = d.research || { current: null, prog: {} };
+  stats = Object.assign({ harvested: 0, tools: 0, everColonists: 0, deaths: 0 }, d.stats || {});
+  colonyDog = d.colonyDog
+    ? { name: d.colonyDog.name, x: d.colonyDog.x, y: d.colonyDog.y,
+        tx: clamp((d.colonyDog.x / TW) | 0, 0, MW - 1), ty: clamp((d.colonyDog.y / TW) | 0, 0, MH - 1),
+        target: null, think: 1 }
+    : null;
   tiles = [];
   for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
     const s = d.tiles[idx(x, y)];
@@ -404,6 +453,7 @@ function loadGame() {
     skills: c.skills || defaultSkills(), age: c.age == null ? 6 : c.age,
     parents: c.parents || null, partner: c.partner || null,
     back: c.back || null, inspiredUntil: c.inspiredUntil || 0,
+    sick: c.sick || null, treatCd: c.treatCd || 0, beingTreated: false,
     buffs: c.buffs || [], say: null, inConvo: false, convoCd: gtime + ri(4, 12) }));
   animals = [];
   for (const a of d.animals || []) {

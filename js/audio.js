@@ -77,6 +77,8 @@ function sfx(name) {
       break;
     case 'wind':   noiseBurst(1.6, 350, 0.02); break;
     case 'douse':  noiseBurst(0.35, 700, 0.05); break;
+    case 'splash': noiseBurst(0.15, 950, 0.05); beep(300, 0.08, 'sine', 0.03, 0.05, 180); break;
+    case 'bark':   beep(620, 0.07, 'square', 0.05); beep(520, 0.09, 'square', 0.045, 0.11); break;
     case 'fire':   noiseBurst(0.5, 500, 0.06); beep(90, 0.4, 'sawtooth', 0.03); break;
     case 'event':  beep(440, 0.12, 'sine', 0.05); beep(587, 0.18, 'sine', 0.05, 0.13); break;
   }

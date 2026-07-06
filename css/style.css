@@ -23,13 +23,25 @@ body {
 #tradebtn { background: #6b5a2a; border-color: #b59b5b; animation: blink 2s infinite; }
 #main { display: flex; position: relative; }
 canvas { background: #000; border: 1px solid #333845; cursor: crosshair; display: block; }
-#trade, #chron {
+#trade, #chron, #respanel {
   position: absolute; top: 40px; left: 20px; width: 330px; background: #1e2129;
   border: 1px solid #e8b04b; border-radius: 8px; padding: 10px 12px; z-index: 5;
   box-shadow: 0 4px 20px rgba(0,0,0,0.5); max-height: 560px; overflow-y: auto;
 }
-#trade h3, #chron h3 { font-size: 13px; color: #e8b04b; display: flex; justify-content: space-between; margin-bottom: 6px; }
-#tclose, #cclose { background: none; border: none; color: #9aa1b0; cursor: pointer; font-size: 13px; }
+#trade h3, #chron h3, #respanel h3 { font-size: 13px; color: #e8b04b; display: flex; justify-content: space-between; margin-bottom: 6px; }
+#tclose, #cclose, #rclose { background: none; border: none; color: #9aa1b0; cursor: pointer; font-size: 13px; }
+.rrow { background: #262b36; border-radius: 6px; padding: 7px 9px; margin-top: 7px; font-size: 12px; }
+.rrow .rname { font-weight: 600; }
+.rrow .rdesc { color: #8a92a3; font-size: 11px; margin-top: 2px; }
+.rrow .rbar { height: 5px; background: #14161c; border-radius: 3px; margin-top: 5px; overflow: hidden; }
+.rrow .rbar i { display: block; height: 100%; background: #7fb5e0; border-radius: 3px; }
+.rrow button {
+  margin-top: 5px; background: #2a3f5c; border: 1px solid #4b6f9e; color: #d8dbe2;
+  border-radius: 4px; padding: 3px 10px; cursor: pointer; font-size: 11px;
+}
+.rrow.done { border-left: 3px solid #5e9e5e; }
+.rrow.active { border-left: 3px solid #7fb5e0; }
+.tool.locked { opacity: 0.45; }
 #chron { width: 380px; }
 .crow { font-size: 11px; color: #b8bfcc; margin-top: 5px; border-left: 2px solid #414859; padding-left: 7px; }
 .crow b { color: #e8b04b; }
@@ -53,6 +65,14 @@ canvas { background: #000; border: 1px solid #333845; cursor: crosshair; display
   background: #2b2517; border: 1px solid #8a7434; border-radius: 6px;
 }
 #goal .gr { color: #b8a06a; margin-top: 2px; }
+#alerts { margin: 8px 8px 0; }
+.alert {
+  background: #3a2323; border: 1px solid #8a4343; color: #e6b8b8; border-radius: 6px;
+  padding: 5px 8px; font-size: 11px; margin-bottom: 4px; animation: fcin 0.4s ease;
+}
+.alert.warn { background: #3a3223; border-color: #8a7434; color: #e6d8b0; }
+#legacy { position: fixed; }
+#legacylog { margin-top: 10px; text-align: left; max-height: 220px; overflow-y: auto; }
 #pawns { flex: 1; overflow-y: auto; padding: 0 8px; }
 .pawn {
   background: #262b36; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; font-size: 12px;

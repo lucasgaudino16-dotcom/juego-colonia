@@ -18,16 +18,26 @@ for (const cat of CATS) {
 function renderTools() {
   toolRow.innerHTML = '';
   for (const t of TOOLS.filter(t => t.cat === activeCat)) {
+    const key = t.id.startsWith('b:') ? t.id.slice(2) : null;
+    const needTech = key && BUILDS[key].tech && !researched[BUILDS[key].tech];
     const b = document.createElement('button');
-    b.className = 'tool' + (t.id === tool ? ' active' : '');
-    b.innerHTML = `${t.icon} ${t.name}${t.cost ? ` <span class="cost">${t.cost}</span>` : ''}`;
+    b.className = 'tool' + (t.id === tool ? ' active' : '') + (needTech ? ' locked' : '');
+    b.innerHTML = `${needTech ? '🔒' : t.icon} ${t.name}${t.cost ? ` <span class="cost">${t.cost}</span>` : ''}`;
     b.onclick = () => {
+      if (needTech) {
+        toolInfo.textContent = `🔒 Requiere investigar: ${TECHS.find(x => x.id === BUILDS[key].tech).name} (panel 🧪)`;
+        return;
+      }
       tool = t.id;
       document.querySelectorAll('.tool').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       toolInfo.textContent = t.desc;
     };
-    b.onmouseenter = () => { toolInfo.textContent = t.desc; };
+    b.onmouseenter = () => {
+      toolInfo.textContent = needTech
+        ? `🔒 Requiere investigar: ${TECHS.find(x => x.id === BUILDS[key].tech).name} (panel 🧪)`
+        : t.desc;
+    };
     toolRow.appendChild(b);
   }
 }
@@ -64,6 +74,36 @@ document.getElementById('chronbtn').onclick = () => {
   if (el.style.display !== 'none') renderChronicle();
 };
 document.getElementById('cclose').onclick = () => { document.getElementById('chron').style.display = 'none'; };
+
+// ============================== PANEL DE INVESTIGACIÓN ==============================
+function renderResearch() {
+  document.getElementById('rrows').innerHTML = TECHS.map(t => {
+    const done = !!researched[t.id];
+    const active = research.current === t.id;
+    const prog = research.prog[t.id] || 0;
+    return `<div class="rrow${done ? ' done' : active ? ' active' : ''}">
+      <div class="rname">${t.icon} ${t.name} ${done ? '✓' : ''}</div>
+      <div class="rdesc">${t.desc}</div>
+      ${done ? '' : `<div class="rbar"><i style="width:${Math.min(100, prog / t.cost * 100)}%"></i></div>
+        <div class="rdesc">${Math.min(prog | 0, t.cost)}/${t.cost} puntos</div>
+        ${active ? '<div class="rdesc" style="color:#7fb5e0">▶ En investigación</div>'
+                 : `<button data-tech="${t.id}">Investigar</button>`}`}
+    </div>`;
+  }).join('');
+}
+document.getElementById('resbtn').onclick = () => {
+  const el = document.getElementById('respanel');
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+  if (el.style.display !== 'none') renderResearch();
+};
+document.getElementById('rclose').onclick = () => { document.getElementById('respanel').style.display = 'none'; };
+document.getElementById('rrows').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b || !b.dataset.tech) return;
+  research.current = b.dataset.tech;
+  addLog(`🧪 La colonia empieza a investigar <b>${TECHS.find(t => t.id === research.current).name}</b>.`);
+  renderResearch();
+});
 
 // ============================== MODAL DE EVENTOS ==============================
 let modalPrevSpeed = 1;
@@ -118,6 +158,25 @@ document.getElementById('introok').onclick = () => {
   document.getElementById('intro').style.display = 'none';
   setSpeed(1);
 };
+
+// ============================== FINAL CON LEGADO ==============================
+function showLegacy() {
+  setSpeed(0);
+  document.getElementById('eventmodal').style.display = 'none';
+  const years = Math.floor((day - 1) / (SEASON_DAYS * 4));
+  document.getElementById('legacytext').innerHTML =
+    `La colonia resistió <b>${day} día${day === 1 ? '' : 's'}</b>${years > 0 ? ` (${years} año${years > 1 ? 's' : ''})` : ''}.<br>
+     Pasaron por ella <b>${stats.everColonists}</b> alma${stats.everColonists === 1 ? '' : 's'};
+     ${stats.deaths} quedaron en esta tierra.<br>
+     Metas cumplidas: <b>${goalIndex}</b> · Tecnologías: <b>${Object.keys(researched).length}</b> ·
+     Cosechas: <b>${stats.harvested}</b>.<br>
+     ${colonyDog ? `${colonyDog.name} aulló hasta el final. 🐕<br>` : ''}
+     <i>Esta fue su historia:</i>`;
+  document.getElementById('legacylog').innerHTML = story.slice(-12).reverse()
+    .map(s => `<div class="crow"><b>Día ${s.day}</b> — ${s.txt}</div>`).join('');
+  document.getElementById('legacy').style.display = '';
+}
+document.getElementById('legacyok').onclick = () => location.reload();
 
 // ============================== COMERCIO ==============================
 function renderTradeRows() {
@@ -236,6 +295,9 @@ function applyTool(t) {
   if (tool.startsWith('b:')) {
     const key = tool.slice(2);
     if (key === 'floor' && (t.floor || t.farm)) return;
+    // el muelle solo va en la orilla (tierra pegada al agua)
+    if (key === 'pier' && !DIRS.some(([dx, dy]) =>
+      inB(t.x + dx, t.y + dy) && T(t.x + dx, t.y + dy).g === 'water')) return;
     if (!t.o && !t.bp && !t.item && t.g !== 'water')
       t.bp = { type: key, cost: BUILDS[key].cost, paid: false };
     return;
@@ -243,7 +305,7 @@ function applyTool(t) {
   switch (tool) {
     case 'chop':    if (t.o === 'tree') t.desig = 'chop'; break;
     case 'mine':    if (t.o === 'rock') t.desig = 'mine'; break;
-    case 'harvest': if (t.o === 'berry' || t.o === 'fiber') t.desig = 'harvest'; break;
+    case 'harvest': if (t.o === 'berry' || t.o === 'fiber' || t.o === 'herb') t.desig = 'harvest'; break;
     case 'hunt':
       for (const a of animals) if (!a.dead && a.tx === t.x && a.ty === t.y) a.hunted = true;
       break;
@@ -285,9 +347,12 @@ function updatePanel() {
   document.getElementById('r-fiber').textContent = resources.fiber;
   document.getElementById('r-food').textContent = resources.food;
   document.getElementById('r-meat').textContent = resources.meat;
+  document.getElementById('r-fish').textContent = resources.fish;
   document.getElementById('r-guiso').textContent = resources.guiso;
   document.getElementById('r-tools').textContent = resources.tools;
   document.getElementById('r-ropa').textContent = resources.ropa;
+  document.getElementById('r-herb').textContent = resources.herb;
+  document.getElementById('r-medicina').textContent = resources.medicina;
   document.getElementById('r-gold').textContent = resources.gold;
   const lowFood = resources.food < 10 && resources.guiso < 3 && resources.meat < 5;
   document.getElementById('res-food').classList.toggle('low', lowFood);
@@ -297,6 +362,20 @@ function updatePanel() {
   const tradeEl = document.getElementById('trade');
   if (!trading) tradeEl.style.display = 'none';
   else if (tradeEl.style.display !== 'none') renderTradeRows();
+  // alertas urgentes
+  const alerts = [];
+  for (const c of colonists) {
+    if (c.sick && c.sick.severity > 0.6)
+      alerts.push([`🤒 <b>${c.name}</b> está grave (${Math.round(c.sick.severity * 100)}%): ¡cama y medicina!`, '']);
+  }
+  if (fires.length) alerts.push(['🔥 ¡Hay un incendio!', '']);
+  const bedCount = tiles.filter(t => t.o === 'bed' || t.o === 'medbed').length;
+  if (bedCount < colonists.length)
+    alerts.push([`🛏️ Faltan camas: ${bedCount} para ${colonists.length} colonos`, ' warn']);
+  if (season().id !== 'winter' && SEASONS[Math.floor(day / SEASON_DAYS) % 4].id === 'winter')
+    alerts.push(['❄️ El invierno llega mañana: guisos, leña y abrigo', ' warn']);
+  document.getElementById('alerts').innerHTML =
+    alerts.map(([txt, cls]) => `<div class="alert${cls}">${txt}</div>`).join('');
   // meta actual de la Cronista
   const goalEl = document.getElementById('goal');
   if (goalIndex >= GOALS.length) {
@@ -337,6 +416,7 @@ function updatePanel() {
       const back = backstoryOf(c);
       extra = `<div class="trait">${TRAITS[c.trait].name} — ${TRAITS[c.trait].desc}</div>
         <div class="trait">📜 ${back.name}: ${back.tale}.</div>
+        ${c.sick ? `<div class="buff neg">🤒 Enfermo/a (${Math.round(c.sick.severity * 100)}%) — necesita reposo y medicina</div>` : ''}
         ${st ? `<div class="buff">${st} (crece con los días)</div>` : ''}
         ${partner ? `<div class="friends">💕 Pareja: ${partner.name}</div>` : ''}
         ${pars.length ? `<div class="friends">👪 De ${pars.map(p => p.name).join(' y ')}</div>` : ''}
@@ -357,7 +437,7 @@ function updatePanel() {
     return `
     <div class="pawn${sel ? ' sel' : ''}" data-id="${c.id}">
       <div class="row1">
-        <span class="nm" style="color:${c.color}">${controlling === c.id ? '🎮' : '●'} ${c.name}</span>
+        <span class="nm" style="color:${c.color}">${controlling === c.id ? '🎮' : '●'} ${c.name}${c.sick ? ' 🤒' : ''}</span>
         <span class="mood">${moodEmoji(md)} ${md}</span>
       </div>
       <div class="tk">${c.inConvo ? 'Charlando 💬' : c.task ? (TASK_LABEL[c.task.type] || c.task.type) : 'Sin tareas'}</div>

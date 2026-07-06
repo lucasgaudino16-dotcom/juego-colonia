@@ -6,7 +6,9 @@ const ctx = canvas.getContext('2d');
 let tiles = [];
 let colonists = [];
 let animals = [];
-let resources = { wood: 40, stone: 20, iron: 0, fiber: 0, food: 30, meat: 0, guiso: 0, tools: 1, ropa: 0, gold: 10 };
+let resources = { wood: 40, stone: 20, iron: 0, fiber: 0, food: 30, meat: 0, fish: 0, guiso: 0,
+                  tools: 1, ropa: 0, herb: 0, medicina: 1, gold: 10 };
+let colonyDog = null;                        // el perro de la colonia 🐕
 let day = 1, time = 0.3, speed = 1, gtime = 0;
 let tool = 'chop', activeCat = 'orders';
 let dragStart = null, panning = null;
@@ -25,8 +27,11 @@ let trader = null, nextTraderDay = 3, traderSay = 0;
 let story = [];                              // crónica de la colonia
 let banner = null;                           // aviso grande de la Cronista
 let effects = [];                            // mini-animaciones de eventos
-let stats = { harvested: 0, tools: 0 };      // contadores para las metas
+let stats = { harvested: 0, tools: 0, everColonists: 0, deaths: 0 };   // contadores para metas y legado
 let goalIndex = 0, goalAnnounced = false, goalAnnounceAt = 50;
+let researched = {};                          // tecnologías completadas
+let research = { current: null, prog: {} };   // tecnología activa y puntos por tec
+let rooms = [];                               // habitaciones interiores con su belleza
 let fires = [];                              // tiles en llamas
 let roomsDirty = true;                       // recalcular interiores
 let coldSnapUntil = 0;                       // ola de frío (evento)
@@ -115,9 +120,24 @@ function moodOf(c) {
   if (c.trait === 'optimista') m += 10;
   if (c.back === 'noble') m += 5;
   if (c.outfit) m += 5;
+  if (c.sick) m -= 10;
   if (c.partner && colonists.some(o => o.id === c.partner)) m += 8;   // enamorado 💕
   for (const b of c.buffs) m += b.val;
   return clamp(Math.round(m), 0, 100);
+}
+function roomBeautyAt(t) {
+  return t.roomId >= 0 && rooms[t.roomId] ? rooms[t.roomId].beauty : 0;
+}
+function getSick(c) {
+  if (c.sick) return;
+  c.sick = { severity: 0.25 + Math.random() * 0.2 };
+  say(c, pick(CHAT.sick), 3);
+  addLog(`🤒 <b>${c.name}</b> cayó enfermo/a.`);
+}
+function cureSick(c) {
+  c.sick = null;
+  addBuff(c, 'Me recuperé 💪', 6, 120);
+  addLog(`💪 <b>${c.name}</b> se recuperó de la gripe.`);
 }
 // habilidades: la práctica sube el nivel y el nivel acelera el trabajo (×0.75 a ×1.35)
 function skillLv(c, id) { return c.skills && c.skills[id] ? c.skills[id].lv : 0; }
@@ -140,6 +160,7 @@ function workMult(c, skillId) {
   if (c.tool) m *= 1.15;
   if (skillId) m *= 0.75 + skillLv(c, skillId) * 0.06;
   if (stageOf(c) === 'child') m *= 0.6;
+  if (c.sick) m *= 0.6;                     // enfermo: trabaja a media máquina
   if (c.inspiredUntil > gtime) m *= 1.5;    // evento de inspiración ✨
   m *= 1 + (moodOf(c) - 50) / 250;          // humor: ×0.8 a ×1.2
   return m;

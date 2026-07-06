@@ -23,6 +23,14 @@ function simStep(dt) {
       if (c.age === 3) addLog(`🎂 <b>${c.name}</b> ya es niño/a: puede acarrear cosas.`);
       if (c.age === 6) addLog(`🎂 <b>${c.name}</b> creció: ¡ya trabaja como adulto!`);
     }
+    // riesgo de enfermarse: el frío y el mal ánimo pasan factura
+    for (const c of colonists) {
+      if (c.sick) continue;
+      let risk = 0.02;
+      if (c.buffs.some(b => b.txt.includes('Frío'))) risk += 0.10;
+      if (moodOf(c) < 30) risk += 0.05;
+      if (Math.random() < risk) getSick(c);
+    }
     // nacimientos: parejas con buen humor pueden tener bebés
     for (const c of colonists) {
       if (!c.partner || c.id > c.partner) continue;
@@ -68,6 +76,7 @@ function simStep(dt) {
         if (nearTree && Math.random() < 0.4) t.o = 'tree';
         else if (Math.random() < 0.05) t.o = 'berry';
         else if (Math.random() < 0.04) t.o = 'fiber';
+        else if (Math.random() < 0.025) t.o = 'herb';
       }
     }
     // fauna (escasea en invierno)
@@ -96,6 +105,7 @@ function simStep(dt) {
   colonists = colonists.filter(c => !c.dead);
   for (const a of animals) if (!a.dead) updateAnimal(a, dt);
   animals = animals.filter(a => !a.dead);
+  updateDog(dt);
   updateTrader(dt);
   // charlas
   updateConvos();
@@ -108,6 +118,7 @@ function simStep(dt) {
     gameOver = true;
     localStorage.removeItem(SAVE_KEY);
     addLog('💀 La colonia se perdió...');
+    showLegacy();
   }
 }
 

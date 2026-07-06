@@ -1,8 +1,10 @@
 'use strict';
 // ============================== FUEGO ==============================
+const BURNABLE = ['tree', 'berry', 'fiber', 'herb', 'door', 'bed', 'table', 'taller', 'telar',
+                  'farol', 'desk', 'chair', 'shelf', 'chest', 'medbed', 'pier'];
 function flammable(t) {
   if (t.fire > 0) return false;
-  if (['tree', 'berry', 'fiber', 'door', 'bed', 'table', 'taller', 'telar', 'farol'].includes(t.o)) return true;
+  if (BURNABLE.includes(t.o)) return true;
   if (t.farm && t.crop !== null && t.crop > 0.15) return true;
   if (t.bp) return true;
   return false;
@@ -15,7 +17,7 @@ function igniteTile(t) {
 }
 function burnOut(t) {
   const hadDoor = t.o === 'door' || t.o === 'wall';
-  if (['tree', 'berry', 'fiber', 'door', 'bed', 'table', 'taller', 'telar', 'farol'].includes(t.o)) {
+  if (BURNABLE.includes(t.o)) {
     t.o = null;
     t.ore = null;
   }
@@ -45,8 +47,9 @@ function updateFires(dt) {
   fires = fires.filter(t => t.fire > 0);
 }
 
-// ============================== INTERIORES ==============================
-// un tile está "bajo techo" si su zona no llega al borde del mapa (cerrada con muros y puertas)
+// ============================== INTERIORES Y BELLEZA ==============================
+// un tile está "bajo techo" si su zona no llega al borde del mapa (cerrada con muros y puertas).
+// cada habitación cerrada suma un puntaje de belleza según lo que tenga adentro.
 function computeRooms() {
   roomsDirty = false;
   const out = new Uint8Array(MW * MH);
@@ -64,7 +67,31 @@ function computeRooms() {
       if (!out[ni] && pass(tiles[ni])) { out[ni] = 1; q.push(ni); }
     }
   }
-  for (let i = 0; i < tiles.length; i++) tiles[i].indoor = !out[i] && pass(tiles[i]);
+  rooms = [];
+  for (let i = 0; i < tiles.length; i++) {
+    tiles[i].indoor = !out[i] && pass(tiles[i]);
+    tiles[i].roomId = -1;
+  }
+  // agrupar las habitaciones y calcular su belleza
+  for (let i = 0; i < tiles.length; i++) {
+    if (!tiles[i].indoor || tiles[i].roomId >= 0) continue;
+    const id = rooms.length;
+    let beauty = 0;
+    const rq = [i];
+    tiles[i].roomId = id;
+    for (let h = 0; h < rq.length; h++) {
+      const t = tiles[rq[h]];
+      if (t.o && BEAUTY[t.o]) beauty += BEAUTY[t.o];
+      if (t.floor) beauty += 0.3;
+      if (t.scorched) beauty -= 2;
+      for (const [dx, dy] of DIRS) {
+        if (!inB(t.x + dx, t.y + dy)) continue;
+        const ni = idx(t.x + dx, t.y + dy);
+        if (tiles[ni].indoor && tiles[ni].roomId < 0) { tiles[ni].roomId = id; rq.push(ni); }
+      }
+    }
+    rooms.push({ beauty: Math.round(beauty) });
+  }
 }
 
 // ============================== METAS DE LA CRONISTA ==============================
@@ -93,6 +120,10 @@ const GOALS = [
     prog: () => `${Math.min(2, stats.tools)}/2`,
     done: () => stats.tools >= 2,
     tale: 'Buenas herramientas, buen futuro.' },
+  { desc: 'Investigar la primera tecnología (escritorio + 🧪)', reward: { gold: 8 },
+    prog: () => `${Object.keys(researched).length > 0 ? 1 : 0}/1`,
+    done: () => Object.keys(researched).length > 0,
+    tale: 'El conocimiento es la única herramienta que no se gasta.' },
   { desc: 'Ser 6 colonos', reward: { gold: 10 },
     prog: () => `${colonists.length}/6`,
     done: () => colonists.length >= 6,
@@ -105,6 +136,10 @@ const GOALS = [
     prog: () => `${Math.min(40, resources.gold)}/40`,
     done: () => resources.gold >= 40,
     tale: 'Los mercaderes ya hablan de este lugar.' },
+  { desc: 'Construir una cama de enfermería', reward: { herb: 6, medicina: 1 },
+    prog: () => `${tiles.some(t => t.o === 'medbed') ? 1 : 0}/1`,
+    done: () => tiles.some(t => t.o === 'medbed'),
+    tale: 'Un pueblo que cura a los suyos no le teme al mañana.' },
   { desc: 'Sobrevivir un año entero', reward: { gold: 25 },
     prog: () => `${Math.min(day, SEASON_DAYS * 4 + 1)}/${SEASON_DAYS * 4 + 1}`,
     done: () => day > SEASON_DAYS * 4,
@@ -263,6 +298,36 @@ const NARRATOR_EVENTS = [
       addEffect({ kind: 'cloud', cid: c.id, dur: 6 });
       return `😔 ${c.name} amaneció con nostalgia de su vida anterior.`;
     } },
+  { id: 'dog', kind: 'good',
+    can: () => !colonyDog && colonists.length > 0,
+    run() {
+      for (let tries = 0; tries < 40; tries++) {
+        const side = ri(0, 3);
+        const x = side < 2 ? ri(2, MW - 3) : side === 2 ? 2 : MW - 3;
+        const y = side === 0 ? 2 : side === 1 ? MH - 3 : ri(2, MH - 3);
+        if (!walkable(T(x, y))) continue;
+        colonyDog = { name: pick(DOG_NAMES), x: x * TW + 8, y: y * TW + 8, tx: x, ty: y,
+                      target: null, think: 0 };
+        sfx('bark');
+        return `🐕 Un perro flaco los miraba desde el borde del claro. Le dejaron un pedazo de carne...
+                y ya no se fue más. <b>${colonyDog.name}</b> es parte de la colonia.`;
+      }
+      return null;
+    } },
+  { id: 'gripe', kind: 'bad',
+    can: () => colonists.filter(c => !c.sick).length >= 2,
+    run() {
+      const sanos = colonists.filter(c => !c.sick);
+      const n = Math.min(sanos.length, ri(1, 2));
+      const names = [];
+      for (let i = 0; i < n; i++) {
+        const c = pick(sanos.filter(x => !x.sick));
+        getSick(c);
+        names.push(c.name);
+        addEffect({ kind: 'cloud', cid: c.id, dur: 5 });
+      }
+      return `🤒 Una gripe recorre la colonia: ${names.join(' y ')} cayó en cama. Hierbas 🌱, medicina 💊 y reposo.`;
+    } },
 ];
 
 const EV_META = {
@@ -276,6 +341,8 @@ const EV_META = {
   blight:   ['🐛', 'Plaga en los cultivos'],
   fox:      ['🦊', 'Ladrón nocturno'],
   blues:    ['😔', 'Nostalgia'],
+  gripe:    ['🤒', 'Brote de gripe'],
+  dog:      ['🐕', 'Un nuevo amigo'],
 };
 function narratorTick() {
   if (gameOver || day < 2 || gtime < nextEventAt) return;
