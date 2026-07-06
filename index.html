@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Mini Colonia</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="top">
+    <h1>⛺ Mini Colonia</h1>
+    <span class="res">🪵 <b id="r-wood">0</b></span>
+    <span class="res">🪨 <b id="r-stone">0</b></span>
+    <span class="res">🔩 <b id="r-iron">0</b></span>
+    <span class="res">🌿 <b id="r-fiber">0</b></span>
+    <span class="res" id="res-food">🍎 <b id="r-food">0</b></span>
+    <span class="res">🍖 <b id="r-meat">0</b></span>
+    <span class="res">🍲 <b id="r-guiso">0</b></span>
+    <span class="res">🔨 <b id="r-tools">0</b></span>
+    <span class="res">👕 <b id="r-ropa">0</b></span>
+    <span class="res">🪙 <b id="r-gold">0</b></span>
+    <span id="warn" style="display:none">⚠️ ¡Poca comida!</span>
+    <span id="clock"></span>
+    <button class="zbtn" id="tradebtn" style="display:none">🛒 Comerciar</button>
+    <button class="zbtn" id="zout">🔍−</button>
+    <button class="zbtn" id="zin">🔍+</button>
+    <button class="zbtn" id="savebtn" title="Guardar partida">💾</button>
+    <button class="zbtn" id="newbtn" title="Nueva partida">🆕</button>
+    <button class="zbtn" id="mutebtn" title="Sonido">🔊</button>
+    <button class="zbtn" id="chronbtn" title="Crónica de la colonia">📖</button>
+    <button class="spd" data-s="0">⏸</button>
+    <button class="spd active" data-s="1">1x</button>
+    <button class="spd" data-s="2">2x</button>
+    <button class="spd" data-s="4">4x</button>
+  </div>
+  <div id="main">
+    <canvas id="c" width="960" height="640"></canvas>
+    <div id="trade" style="display:none">
+      <h3>🛒 Mercader ambulante <button id="tclose">✕</button></h3>
+      <div style="font-size:12px">Tu oro: 🪙 <b id="t-gold">0</b></div>
+      <div id="trows"></div>
+    </div>
+    <div id="chron" style="display:none">
+      <h3>📖 Crónica de la colonia <button id="cclose">✕</button></h3>
+      <div id="crows"></div>
+    </div>
+    <div id="eventmodal" class="overlay" style="display:none">
+      <div class="emcard">
+        <span class="emicon" id="emicon">📜</span>
+        <div class="emtitle" id="emtitle"></div>
+        <div class="emtext" id="emtext"></div>
+        <button class="embtn" id="emok">Seguir ▸</button>
+      </div>
+    </div>
+    <div id="intro" class="overlay" style="display:none">
+      <div class="emcard introcard">
+        <div class="emtitle" style="font-size:20px">✨ El despertar</div>
+        <div class="emtext" id="introtext"></div>
+        <canvas id="introMap" width="400" height="280"></canvas>
+        <div id="introcards"></div>
+        <div id="introbonds"></div>
+        <button class="embtn" id="introok">⛺ Fundar la colonia</button>
+      </div>
+    </div>
+    <div id="side">
+      <div id="goal" style="display:none"></div>
+      <h2>Colonos</h2>
+      <div id="pawns"></div>
+      <div id="log"></div>
+    </div>
+  </div>
+  <div id="tools">
+    <div id="cats"></div>
+    <div id="toolrow"></div>
+    <div id="toolinfo"></div>
+  </div>
+  <div id="hint"><b>Arrastrá</b> para dar órdenes · <b>Rueda</b> = zoom · <b>Click derecho</b> = mover cámara ·
+  <b>Click en colono</b> = ficha (con prioridades de trabajo e inventario) · <b>C</b> = controlarlo (WASD mover, E interactuar) · Espacio = pausa</div>
+
+  <script src="js/data.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/story.js"></script>
+  <script src="js/colonists.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
